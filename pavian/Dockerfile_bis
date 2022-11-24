@@ -1,0 +1,24 @@
+FROM rocker/shiny:latest
+
+# Installing packages needed for check traffic on the container and kill if none
+RUN echo "force-unsafe-io" > /etc/dpkg/dpkg.cfg.d/02apt-speedup && \
+    echo "Acquire::http {No-Cache=True;};" > /etc/apt/apt.conf.d/no-cache && \
+    apt-get -qq update && apt-get install --no-install-recommends -y net-tools procps libgdal-dev libproj-dev && \
+#    Installing R package dedicated to the Pavian app
+    Rscript -e "options(repos = c(CRAN = 'http://cran.rstudio.com')); install.packages(c('remotes'));" && \
+    Rscript -e "install.packages('BiocManager')" && \
+    Rscript -e "BiocManager::install('Rsamtools')" && \
+    Rscript -e "remotes::install_github('fbreitwieser/pavian')"
+
+
+COPY shiny-server.conf  /etc/shiny-server/shiny-server.conf
+RUN rm -rf /srv/shiny-server/*
+RUN Rscript -e "sapply(list.files(system.file('shinyapp',package='pavian'),full.names=TRUE),file.copy,to='/srv/shiny-server/',recursive=TRUE)"
+
+# Bash script to check traffic
+ADD ./monitor_traffic.sh /monitor_traffic.sh
+
+# Bash script to launch Shiny server
+COPY shiny-server.sh /usr/bin/shiny-server.sh
+RUN ["chmod", "+x", "/usr/bin/shiny-server.sh"]
+CMD ["/usr/bin/shiny-server.sh"]
